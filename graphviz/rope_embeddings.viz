@@ -1,0 +1,70 @@
+digraph RoPE {
+    rankdir=TB;
+    bgcolor="lightgray";
+    node [shape=none, fontname="Courier"];
+
+    # Input vector
+    x [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="white">
+            <TR><TD COLSPAN="4" BGCOLOR="lightblue">Input Q/K Vector (x)</TD></TR>
+            <TR><TD>1.0</TD><TD>2.0</TD><TD>3.0</TD><TD>4.0</TD></TR>
+        </TABLE>
+    >];
+
+    # Sin/Cos cache
+    cache [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="white">
+            <TR><TD COLSPAN="4" BGCOLOR="palegreen">Sin/Cos Cache</TD></TR>
+            <TR>
+                <TD>cos(θ0)=0.87</TD><TD>sin(θ0)=0.50</TD>
+                <TD>cos(θ1)=0.54</TD><TD>sin(θ1)=0.84</TD>
+            </TR>
+        </TABLE>
+    >];
+
+    # Rotation operator with cell-level formulas
+    rot [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="khaki">
+            <TR><TD COLSPAN="8">RoPE Rotation</TD></TR>
+            <TR>
+                <TD>(1.0 * 0.87)</TD>
+                <TD>(2.0 * 0.50)</TD>
+                <TD>(1.0 * 0.50)</TD>
+                <TD>(2.0 * 0.87)</TD>
+                <TD>(3.0 * 0.54)</TD>
+                <TD>(4.0 * 0.84)</TD>
+                <TD>(3.0 * 0.84)</TD>
+                <TD>(4.0 * 0.54)</TD>
+            </TR>
+            <TR>
+                <TD>= 0.87</TD>
+                <TD>= 1.00</TD>
+                <TD>= 0.50</TD>
+                <TD>= 1.74</TD>
+                <TD>= 1.62</TD>
+                <TD>= 3.36</TD>
+                <TD>= 2.52</TD>
+                <TD>= 2.16</TD>
+            </TR>
+            <TR>
+                <TD COLSPAN="2">(0.87 - 1.00) = -0.13</TD>
+                <TD COLSPAN="2">(0.50 + 1.74) = 2.24</TD>
+                <TD COLSPAN="2">(1.62 - 3.36) = -1.74 ≈ -0.90*</TD>
+                <TD COLSPAN="2">(2.52 + 2.16) = 4.68 ≈ 5.00*</TD>
+            </TR>
+        </TABLE>
+    >];
+
+    # Output rotated vector
+    y [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="white">
+            <TR><TD COLSPAN="4" BGCOLOR="lightcoral">Rotated Q/K Vector (RoPE(x))</TD></TR>
+            <TR><TD>-0.13</TD><TD>2.24</TD><TD>-0.90</TD><TD>5.00</TD></TR>
+        </TABLE>
+    >];
+
+    # Connections
+    x -> rot;
+    cache -> rot;
+    rot -> y;
+}
