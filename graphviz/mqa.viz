@@ -1,0 +1,92 @@
+digraph MQA {
+    rankdir=TB;
+    bgcolor="lightgray";
+    splines=ortho;
+    node [shape=none, fontname="Courier"];
+    
+    # Input Embeddings
+    input [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffffff">
+            <TR><TD COLSPAN="2" BGCOLOR="#cce5ff">Input X</TD></TR>
+            <TR><TD>Shape</TD><TD>Batch × Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_model = 512</TD></TR>
+        </TABLE>
+    >];
+    
+    # Single shared KV pair
+    shared_kv [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffd966">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffcc00">Shared Key-Value Pair</TD></TR>
+            <TR><TD>K Head</TD><TD>Seq × d_head (128)</TD></TR>
+            <TR><TD>V Head</TD><TD>Seq × d_head (128)</TD></TR>
+            <TR><TD COLSPAN="2">Single KV shared by ALL queries</TD></TR>
+        </TABLE>
+    >];
+    
+    # Multiple Query heads
+    queries [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#e6ffe6">
+            <TR><TD COLSPAN="4" BGCOLOR="#66cc66">Query Heads (All use same K,V)</TD></TR>
+            <TR>
+              <TD BGCOLOR="#99ff99">Q Head 0<br/>Seq × d_head<br/>d_head=128</TD>
+              <TD BGCOLOR="#99ff99">Q Head 1<br/>Seq × d_head<br/>d_head=128</TD>
+              <TD BGCOLOR="#99ff99">Q Head 2<br/>Seq × d_head<br/>d_head=128</TD>
+              <TD BGCOLOR="#99ff99">Q Head 3<br/>Seq × d_head<br/>d_head=128</TD>
+            </TR>
+            <TR>
+              <TD COLSPAN="4" BGCOLOR="#ccffcc">n_q_heads = 4, n_kv_heads = 1</TD>
+            </TR>
+        </TABLE>
+    >];
+    
+    # Attention computation
+    attention [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#66d9ff">Multi-Query Attention</TD></TR>
+            <TR><TD>Each Q head:</TD><TD>Softmax(Qᵢ·Kᵀ / √d_head) × V</TD></TR>
+            <TR><TD>Shared K,V:</TD><TD>Same K,V used for all queries</TD></TR>
+            <TR><TD>Output shape:</TD><TD>Seq × d_head per Q head</TD></TR>
+            <TR><TD COLSPAN="2">Memory efficient: 1 KV cache vs n KV caches</TD></TR>
+        </TABLE>
+    >];
+    
+    # Concat
+    concat [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f9e6ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffb3ff">Concat Heads</TD></TR>
+            <TR><TD>Combine</TD><TD>n_q_heads × d_head</TD></TR>
+            <TR><TD COLSPAN="2">Example: 4 × 128 = 512</TD></TR>
+        </TABLE>
+    >];
+    
+    # Output
+    output [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6e6e6">
+            <TR><TD COLSPAN="2" BGCOLOR="#999999">Output Projection</TD></TR>
+            <TR><TD>Shape</TD><TD>Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_model = 512</TD></TR>
+        </TABLE>
+    >];
+    
+    # Key differences note
+    // differences [label=<
+    //     <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffe6e6">
+    //         <TR><TD COLSPAN="2" BGCOLOR="#ff9999">MQA vs GQA vs MHA</TD></TR>
+    //         <TR><TD>MQA:</TD><TD>n_q_heads queries, 1 key-value pair</TD></TR>
+    //         <TR><TD>GQA:</TD><TD>n_q_heads queries, few key-value pairs</TD></TR>
+    //         <TR><TD>MHA:</TD><TD>n_q_heads queries, n_q_heads key-value pairs</TD></TR>
+    //         <TR><TD COLSPAN="2">MQA: Maximum memory efficiency</TD></TR>
+    //     </TABLE>
+    // >];
+    
+    # Edges
+    input -> shared_kv;
+    input -> queries;
+    shared_kv -> attention;
+    queries -> attention;
+    attention -> concat;
+    concat -> output;
+    
+    // Position the comparison box
+    // {rank=same; output; differences}
+}

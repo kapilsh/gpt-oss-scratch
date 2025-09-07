@@ -1,0 +1,74 @@
+digraph ModelWeights {
+  rankdir=TB;
+  fontsize=12;
+  node [shape=plaintext, fontname="Courier"];
+
+  /* Embedding and final layers */
+  embedding [label=<
+    <table border="0" cellborder="1" cellspacing="0">
+      <tr><td bgcolor="#d0e8ff"><b>embedding.weight</b></td></tr>
+      <tr><td align="left">[201088, 2880] • bfloat16 • 579,133,440</td></tr>
+    </table>
+  >];
+
+  final_norm [label=<
+    <table border="0" cellborder="1" cellspacing="0">
+      <tr><td bgcolor="#ffe8d0"><b>norm.scale</b></td></tr>
+      <tr><td align="left">[2880] • float32 • 2,880</td></tr>
+    </table>
+  >];
+
+  unembedding [label=<
+    <table border="0" cellborder="1" cellspacing="0">
+      <tr><td bgcolor="#ffd0d0"><b>unembedding.weight</b></td></tr>
+      <tr><td align="left">[201088, 2880] • bfloat16 • 579,133,440</td></tr>
+    </table>
+  >];
+
+  /* Block template with all weights */
+    block0 [label=<
+      <table border="0" cellborder="1" cellspacing="0">
+        <tr><td colspan="2" bgcolor="#e8f7e8"><b>Block 0</b></td></tr>
+        <tr><td align="left">attn.sinks</td><td align="right">[64] • bfloat16 • 64</td></tr>
+        <tr><td align="left">attn.norm.scale</td><td align="right">[2880] • float32 • 2880</td></tr>
+        <tr><td align="left">attn.qkv.weight</td><td align="right">[5120,2880] • bfloat16 • 14,745,600</td></tr>
+        <tr><td align="left">attn.qkv.bias</td><td align="right">[5120] • bfloat16 • 5,120</td></tr>
+        <tr><td align="left">attn.out.weight</td><td align="right">[2880,4096] • bfloat16 • 11,796,480</td></tr>
+        <tr><td align="left">attn.out.bias</td><td align="right">[2880] • bfloat16 • 2,880</td></tr>
+
+        <!-- UPDATED QUANTIZED PARTS -->
+        <tr bgcolor="#fff4cc"><td align="left"><b>mlp.mlp1_weight</b></td><td align="right">[32,5760,1440] • uint8 • 265,420,800</td></tr>
+        <tr><td align="left">mlp.mlp1_bias</td><td align="right">[32,5760] • bfloat16 • 184,320</td></tr>
+        <tr bgcolor="#fff4cc"><td align="left"><b>mlp.mlp2_weight</b></td><td align="right">[32,5760,720] • uint8 • 132,710,400</td></tr>
+        <tr><td align="left">mlp.mlp2_bias</td><td align="right">[32,2880] • bfloat16 • 92,160</td></tr>
+        <tr><td align="left">mlp.norm.scale</td><td align="right">[2880] • float32 • 2,880</td></tr>
+        <tr><td align="left">mlp.gate.bias</td><td align="right">[32] • bfloat16 • 32</td></tr>
+        <tr><td align="left">mlp.gate.weight</td><td align="right">[32, 2880] • bfloat16 • 92,160</td></tr>
+      </table>
+    >];
+  /* Collapsed block cluster 2–22 */
+    subgraph cluster_mid {
+        label="Blocks 2–23";
+        style=rounded;
+        color=gray;
+        fontname="Courier";
+        labelloc="t";   // top (default), use "b" for bottom
+        labeljust="l";  // left aligned label
+    
+        blocks2_23 [label=<
+          <table border="0" cellborder="1" cellspacing="0">
+            <tr><td bgcolor="#f9f9f9"><b>Each Block has 13 parameters</b></td></tr>
+            <tr><td align="left">attn.sinks • attn.norm.scale • qkv (W,b) • out (W,b)</td></tr>
+            <tr><td align="left">mlp1 (W,b) • mlp2 (W,b)</td></tr>
+            <tr><td align="left">mlp.norm.scale • gate (W,b)</td></tr>
+          </table>
+        >];
+    }
+
+  /* Edges: top to bottom */
+  embedding -> block0 -> blocks2_23 -> final_norm -> unembedding;
+
+  /* Summary annotation */
+  summary [shape=note, label="Input Tokens | Vocab Size = 201088", fontsize=11];
+  summary -> embedding [style=dashed];
+}

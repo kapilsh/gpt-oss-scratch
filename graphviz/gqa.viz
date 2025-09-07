@@ -1,0 +1,92 @@
+digraph GQA {
+    rankdir=TB;
+    bgcolor="lightgray";
+    splines=ortho;
+    node [shape=none, fontname="Courier"];
+
+    # Input Embeddings
+    input [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffffff">
+            <TR><TD COLSPAN="2" BGCOLOR="#cce5ff">Input X</TD></TR>
+            <TR><TD>Shape</TD><TD>Batch × Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_model = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Group 0: Q0,Q1 with K0,V0
+    group0 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD COLSPAN="3" BGCOLOR="#cc99ff">Group 0 (n_q_heads/n_kv_heads = 2)</TD></TR>
+            <TR>
+              <TD BGCOLOR="#99ff99">Q Head 0<br/>Seq × d_head<br/>d_head=128</TD>
+              <TD BGCOLOR="#99ff99">Q Head 1<br/>Seq × d_head<br/>d_head=128</TD>
+              <TD ROWSPAN="2" BGCOLOR="#ffd966">K Head 0<br/>Seq × d_head<br/>d_head=128<br/><br/>V Head 0<br/>Seq × d_head</TD>
+            </TR>
+            <TR>
+              <TD COLSPAN="2" BGCOLOR="#e6ffe6">Queries share same KV</TD>
+            </TR>
+        </TABLE>
+    >];
+
+    # Group 1: Q2,Q3 with K1,V1
+    group1 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD COLSPAN="3" BGCOLOR="#cc99ff">Group 1 (n_q_heads/n_kv_heads = 2)</TD></TR>
+            <TR>
+              <TD BGCOLOR="#99ff99">Q Head 2<br/>Seq × d_head<br/>d_head=128</TD>
+              <TD BGCOLOR="#99ff99">Q Head 3<br/>Seq × d_head<br/>d_head=128</TD>
+              <TD ROWSPAN="2" BGCOLOR="#ffd966">K Head 1<br/>Seq × d_head<br/>d_head=128<br/><br/>V Head 1<br/>Seq × d_head</TD>
+            </TR>
+            <TR>
+              <TD COLSPAN="2" BGCOLOR="#e6ffe6">Queries share same KV</TD>
+            </TR>
+        </TABLE>
+    >];
+
+    # Attention blocks
+    attn0 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#66d9ff">Attention (Group 0)</TD></TR>
+            <TR><TD>Compute</TD><TD>Softmax(Q·Kᵀ / √d_head) × V</TD></TR>
+            <TR><TD>Shape</TD><TD>Seq × d_head per Q head</TD></TR>
+        </TABLE>
+    >];
+
+    attn1 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#66d9ff">Attention (Group 1)</TD></TR>
+            <TR><TD>Compute</TD><TD>Softmax(Q·Kᵀ / √d_head) × V</TD></TR>
+            <TR><TD>Shape</TD><TD>Seq × d_head per Q head</TD></TR>
+        </TABLE>
+    >];
+
+    # Concat
+    concat [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f9e6ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffb3ff">Concat Heads</TD></TR>
+            <TR><TD>Combine</TD><TD>n_q_heads × d_head</TD></TR>
+            <TR><TD COLSPAN="2">Example: 4 × 128 = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Output
+    output [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6e6e6">
+            <TR><TD COLSPAN="2" BGCOLOR="#999999">Output Projection</TD></TR>
+            <TR><TD>Shape</TD><TD>Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_model = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Edges
+    input -> group0;
+    input -> group1;
+
+    group0 -> attn0;
+    group1 -> attn1;
+
+    attn0 -> concat;
+    attn1 -> concat;
+
+    concat -> output;
+}

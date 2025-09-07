@@ -1,0 +1,132 @@
+digraph MHA {
+    rankdir=TB;
+    bgcolor="lightgray";
+    splines=ortho;
+    node [shape=none, fontname="Courier"];
+
+    # Input Embeddings
+    input [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffffff">
+            <TR><TD COLSPAN="2" BGCOLOR="#cce5ff">Input X</TD></TR>
+            <TR><TD>Shape</TD><TD>Batch × Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_model = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Head 0
+    head0 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD COLSPAN="3" BGCOLOR="#cc99ff">Head 0</TD></TR>
+            <TR>
+                <TD BGCOLOR="#99ff99">Q Head 0<br/>Seq × d_head<br/>d_head=128</TD>
+                <TD BGCOLOR="#ffd966">K Head 0<br/>Seq × d_head<br/>d_head=128</TD>
+                <TD BGCOLOR="#ffd966">V Head 0<br/>Seq × d_head</TD>
+            </TR>
+        </TABLE>
+    >];
+
+    # Head 1
+    head1 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD COLSPAN="3" BGCOLOR="#cc99ff">Head 1</TD></TR>
+            <TR>
+                <TD BGCOLOR="#99ff99">Q Head 1<br/>Seq × d_head<br/>d_head=128</TD>
+                <TD BGCOLOR="#ffd966">K Head 1<br/>Seq × d_head<br/>d_head=128</TD>
+                <TD BGCOLOR="#ffd966">V Head 1<br/>Seq × d_head</TD>
+            </TR>
+        </TABLE>
+    >];
+
+    # Head 2
+    head2 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD COLSPAN="3" BGCOLOR="#cc99ff">Head 2</TD></TR>
+            <TR>
+                <TD BGCOLOR="#99ff99">Q Head 2<br/>Seq × d_head<br/>d_head=128</TD>
+                <TD BGCOLOR="#ffd966">K Head 2<br/>Seq × d_head<br/>d_head=128</TD>
+                <TD BGCOLOR="#ffd966">V Head 2<br/>Seq × d_head</TD>
+            </TR>
+        </TABLE>
+    >];
+
+    # Head 3
+    head3 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD COLSPAN="3" BGCOLOR="#cc99ff">Head 3</TD></TR>
+            <TR>
+                <TD BGCOLOR="#99ff99">Q Head 3<br/>Seq × d_head<br/>d_head=128</TD>
+                <TD BGCOLOR="#ffd966">K Head 3<br/>Seq × d_head<br/>d_head=128</TD>
+                <TD BGCOLOR="#ffd966">V Head 3<br/>Seq × d_head</TD>
+            </TR>
+        </TABLE>
+    >];
+
+    # Attention blocks
+    attn0 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD BGCOLOR="#66d9ff">Attention (Head 0)</TD></TR>
+            <TR><TD>Compute<br/>Softmax(Q·Kᵀ / √d_head) × V</TD></TR>
+            <TR><TD>Shape<br/>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    attn1 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD BGCOLOR="#66d9ff">Attention (Head 1)</TD></TR>
+            <TR><TD>Compute<br/>Softmax(Q·Kᵀ / √d_head) × V</TD></TR>
+            <TR><TD>Shape<br/>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    attn2 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD BGCOLOR="#66d9ff">Attention (Head 2)</TD></TR>
+            <TR><TD>Compute<br/>Softmax(Q·Kᵀ / √d_head) × V</TD></TR>
+            <TR><TD>Shape<br/>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    attn3 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD BGCOLOR="#66d9ff">Attention (Head 3)</TD></TR>
+            <TR><TD>Compute<br/>Softmax(Q·Kᵀ / √d_head) × V</TD></TR>
+            <TR><TD>Shape<br/>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    # Concat
+    concat [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f9e6ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffb3ff">Concat Heads</TD></TR>
+            <TR><TD>Combine</TD><TD>n_heads × d_head</TD></TR>
+            <TR><TD COLSPAN="2">Example: 4 × 128 = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Output
+    output [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6e6e6">
+            <TR><TD COLSPAN="2" BGCOLOR="#999999">Output Projection</TD></TR>
+            <TR><TD>Shape</TD><TD>Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_model = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Edges
+    input -> head0;
+    input -> head1;
+    input -> head2;
+    input -> head3;
+
+    head0 -> attn0;
+    head1 -> attn1;
+    head2 -> attn2;
+    head3 -> attn3;
+
+    attn0 -> concat;
+    attn1 -> concat;
+    attn2 -> concat;
+    attn3 -> concat;
+
+    concat -> output;
+}

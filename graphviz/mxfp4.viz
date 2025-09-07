@@ -1,0 +1,164 @@
+digraph MXFP4_Conversion {
+    pad="0.5";
+    bgcolor="lightgray"
+    
+    // Graph attributes
+    graph [fontname="Courier", fontsize=14, splines=ortho, nodesep=1, ranksep=1.5];
+    node [fontname="Courier", fontsize=14, margin=0, shape=none];
+    edge [fontname="Courier", fontsize=14, penwidth=2];
+
+    // Input BF16 values
+    input [label=<
+        <table border="3" cellborder="1" cellspacing="2" bgcolor="#4CAF50" >
+            <tr><td bgcolor="#66BB6A" colspan="4"><font color="white"><b>🎯 Input BF16 Tensor</b></font></td></tr>
+            <tr>
+                <td bgcolor="#81C784"><font color="white"><b>2.5</b></font></td>
+                <td bgcolor="#81C784"><font color="white"><b>-1.25</b></font></td>
+                <td bgcolor="#81C784"><font color="white"><b>0.75</b></font></td>
+                <td bgcolor="#81C784"><font color="white"><b>4.0</b></font></td>
+            </tr>
+            <tr><td bgcolor="#A5D6A7" colspan="4"><font color="#2E7D32"><i>16 bits each × 4 = 64 bits total</i></font></td></tr>
+        </table>
+    >];
+
+    // Find maximum absolute value
+    find_max [label=<
+        <table border="3" cellborder="1" cellspacing="2" bgcolor="#2196F3">
+            <tr><td bgcolor="#42A5F5" colspan="2"><font color="white"><b>📊 Find Max |Value|</b></font></td></tr>
+            <tr>
+                <td bgcolor="#64B5F6"><font color="white">|2.5| = 2.5</font></td>
+                <td bgcolor="#64B5F6"><font color="white">|-1.25| = 1.25</font></td>
+            </tr>
+            <tr>
+                <td bgcolor="#64B5F6"><font color="white">|0.75| = 0.75</font></td>
+                <td bgcolor="#64B5F6"><font color="white">|4.0| = 4.0</font></td>
+            </tr>
+            <tr><td bgcolor="#90CAF9" colspan="2"><font color="#1565C0"><b>Max = 4.0</b></font></td></tr>
+        </table>
+    >];
+
+    // Compute scale factor
+    scale_calc [label=<
+        <table border="3" cellborder="1" cellspacing="2" bgcolor="#FF9800">
+            <tr><td bgcolor="#FFA726" colspan="2"><font color="white"><b>⚖️ Compute Scale Factor</b></font></td></tr>
+            <tr><td bgcolor="#FFB74D" colspan="2"><font color="white">scale = max_val / max_mxfp4</font></td></tr>
+            <tr><td bgcolor="#FFB74D" colspan="2"><font color="white">scale = 4.0 / 6.0 = 0.667</font></td></tr>
+            <tr><td bgcolor="#FFB74D" colspan="2"><font color="white">Use power-of-2: scale = 1.0</font></td></tr>
+            <tr><td bgcolor="#FFCC80" colspan="2"><font color="#E65100"><b>Final Scale = 1.0</b></font></td></tr>
+        </table>
+    >];
+
+    // Scale values
+    scale_values [label=<
+        <table border="3" cellborder="1" cellspacing="2" bgcolor="#2196F3">
+            <tr><td bgcolor="#42A5F5" colspan="4"><font color="white"><b>🔄 Scale Values</b></font></td></tr>
+            <tr>
+                <td bgcolor="#64B5F6"><font color="white">2.5/1.0</font></td>
+                <td bgcolor="#64B5F6"><font color="white">-1.25/1.0</font></td>
+                <td bgcolor="#64B5F6"><font color="white">0.75/1.0</font></td>
+                <td bgcolor="#64B5F6"><font color="white">4.0/1.0</font></td>
+            </tr>
+            <tr>
+                <td bgcolor="#90CAF9"><font color="#1565C0"><b>2.5</b></font></td>
+                <td bgcolor="#90CAF9"><font color="#1565C0"><b>-1.25</b></font></td>
+                <td bgcolor="#90CAF9"><font color="#1565C0"><b>0.75</b></font></td>
+                <td bgcolor="#90CAF9"><font color="#1565C0"><b>4.0</b></font></td>
+            </tr>
+        </table>
+    >];
+
+    // MXFP4 lookup table
+    mxfp4_lut [label=<
+        <table border="3" cellborder="1" cellspacing="2" bgcolor="#9C27B0">
+            <tr><td bgcolor="#AB47BC" colspan="8"><font color="white"><b>🎲 MXFP4 E2M1 Lookup Table</b></font></td></tr>
+            <tr>
+                <td bgcolor="#BA68C8"><font color="white"><b>0000</b><br/>0.0</font></td>
+                <td bgcolor="#BA68C8"><font color="white"><b>0001</b><br/>0.5</font></td>
+                <td bgcolor="#BA68C8"><font color="white"><b>0010</b><br/>1.0</font></td>
+                <td bgcolor="#BA68C8"><font color="white"><b>0011</b><br/>1.5</font></td>
+                <td bgcolor="#BA68C8"><font color="white"><b>0100</b><br/>2.0</font></td>
+                <td bgcolor="#BA68C8"><font color="white"><b>0101</b><br/>3.0</font></td>
+                <td bgcolor="#BA68C8"><font color="white"><b>0110</b><br/>4.0</font></td>
+                <td bgcolor="#BA68C8"><font color="white"><b>0111</b><br/>6.0</font></td>
+            </tr>
+            <tr>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1000</b><br/>-0.0</font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1001</b><br/>-0.5</font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1010</b><br/>-1.0</font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1011</b><br/>-1.5</font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1100</b><br/>-2.0</font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1101</b><br/>-3.0</font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1110</b><br/>-4.0</font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1111</b><br/>-6.0</font></td>
+            </tr>
+        </table>
+    >];
+
+    // Quantization process
+    quantize [label=<
+        <table border="3" cellborder="1" cellspacing="2" bgcolor="#9C27B0">
+            <tr><td bgcolor="#AB47BC" colspan="4"><font color="white"><b>🎯 Nearest Value Quantization</b></font></td></tr>
+            <tr>
+                <td bgcolor="#BA68C8"><font color="white">2.5 → 2.0</font></td>
+                <td bgcolor="#BA68C8"><font color="white">-1.25 → -1.0</font></td>
+                <td bgcolor="#BA68C8"><font color="white">0.75 → 1.0</font></td>
+                <td bgcolor="#BA68C8"><font color="white">4.0 → 4.0</font></td>
+            </tr>
+            <tr>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>0100</b></font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>1010</b></font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>0010</b></font></td>
+                <td bgcolor="#CE93D8"><font color="#4A148C"><b>0110</b></font></td>
+            </tr>
+        </table>
+    >];
+
+    // Final output
+    output [label=<
+        <table border="3" cellborder="1" cellspacing="2" bgcolor="#F44336">
+            <tr><td bgcolor="#EF5350" colspan="2"><font color="white"><b>🎉 MXFP4 Output</b></font></td></tr>
+            <tr>
+                <td bgcolor="#E57373"><font color="white"><b>Quantized Codes</b></font></td>
+                <td bgcolor="#E57373"><font color="white"><b>Scale Factor</b></font></td>
+            </tr>
+            <tr>
+                <td bgcolor="#FFCDD2"><font color="#C62828">[0100, 1010, 0010, 0110]</font></td>
+                <td bgcolor="#FFCDD2"><font color="#C62828">1.0</font></td>
+            </tr>
+            <tr><td bgcolor="#FFEBEE" colspan="2"><font color="#B71C1C"><i>4×4 bits + 1×32 bits = 48 bits total</i></font></td></tr>
+            <tr><td bgcolor="#FFEBEE" colspan="2"><font color="#B71C1C"><b>Compression: 64→48 bits (25% savings)</b></font></td></tr>
+        </table>
+    >];
+
+    // Dequantization example
+    dequant [label=<
+        <table border="3" cellborder="1" cellspacing="2" bgcolor="#607D8B">
+            <tr><td bgcolor="#78909C" colspan="4"><font color="white"><b>🔄 Dequantization Example</b></font></td></tr>
+            <tr>
+                <td bgcolor="#90A4AE"><font color="white">0100 × 1.0</font></td>
+                <td bgcolor="#90A4AE"><font color="white">1010 × 1.0</font></td>
+                <td bgcolor="#90A4AE"><font color="white">0010 × 1.0</font></td>
+                <td bgcolor="#90A4AE"><font color="white">0110 × 1.0</font></td>
+            </tr>
+            <tr>
+                <td bgcolor="#B0BEC5"><font color="#263238">2.0</font></td>
+                <td bgcolor="#B0BEC5"><font color="#263238">-1.0</font></td>
+                <td bgcolor="#B0BEC5"><font color="#263238">1.0</font></td>
+                <td bgcolor="#B0BEC5"><font color="#263238">4.0</font></td>
+            </tr>
+            <tr><td bgcolor="#CFD8DC" colspan="4"><font color="#37474F"><i>Reconstruction errors: [0.5, 0.25, -0.25, 0.0]</i></font></td></tr>
+        </table>
+    >];
+
+    // Edges with colors and labels
+    input -> find_max [color="#4CAF50", penwidth=3, label=<    <font color="#2E7D32"><b>Input values</b></font>    >];
+    find_max -> scale_calc [color="#2196F3", penwidth=3, label=<    <font color="#1565C0"><b>Max = 4.0</b></font>    >];
+    scale_calc -> scale_values [color="#FF9800", penwidth=3, label=<    <font color="#E65100"><b>scale = 1.0</b></font>    >];
+    scale_values -> quantize [color="#2196F3", penwidth=3, label=<    <font color="#1565C0"><b>Scaled values</b></font>    >];
+    mxfp4_lut -> quantize [color="#9C27B0", penwidth=3, label=<    <font color="#4A148C"><b>Reference table</b></font>    >];
+    quantize -> output [color="#9C27B0", penwidth=3, label=<    <font color="#4A148C"><b>4-bit codes</b></font>    >];
+    output -> dequant [color="#F44336", penwidth=3, label=<    <font color="#C62828"><b>For verification</b></font>    >];
+
+    // Invisible edges for better layout
+    {rank=same; scale_calc; mxfp4_lut;}
+}
