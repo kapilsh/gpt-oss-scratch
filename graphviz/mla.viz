@@ -1,0 +1,131 @@
+digraph MLA {
+    rankdir=TB;
+    bgcolor="lightgray";
+    splines=ortho;
+    node [shape=none, fontname="Courier"];
+
+    # Input Embeddings
+    input [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffffff">
+            <TR><TD COLSPAN="2" BGCOLOR="#cce5ff">Input X</TD></TR>
+            <TR><TD>Shape</TD><TD>Batch × Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_model = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Latent KV Cache
+    latent_kv [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#fff2cc">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffcc66">Compressed Latent KV Cache</TD></TR>
+            <TR><TD>K_latent</TD><TD>L × d_head</TD></TR>
+            <TR><TD>V_latent</TD><TD>L × d_head</TD></TR>
+            <TR><TD COLSPAN="2">L ≪ Seq (e.g., L=256 vs Seq=4096)</TD></TR>
+        </TABLE>
+    >];
+
+    # Heads (Q only)
+    head0 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD BGCOLOR="#cc99ff">Head 0</TD></TR>
+            <TR><TD BGCOLOR="#99ff99">Q Head 0<br/>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    head1 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD BGCOLOR="#cc99ff">Head 1</TD></TR>
+            <TR><TD BGCOLOR="#99ff99">Q Head 1<br/>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    head2 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD BGCOLOR="#cc99ff">Head 2</TD></TR>
+            <TR><TD BGCOLOR="#99ff99">Q Head 2<br/>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    head3 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="2" BGCOLOR="#f2e6ff">
+            <TR><TD BGCOLOR="#cc99ff">Head 3</TD></TR>
+            <TR><TD BGCOLOR="#99ff99">Q Head 3<br/>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    # Attention blocks (aligned with heads)
+    attn0 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD BGCOLOR="#66d9ff">Attention (Head 0)</TD></TR>
+            <TR><TD>Softmax(Q·K_latentᵀ / √d_head) × V_latent</TD></TR>
+            <TR><TD>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    attn1 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD BGCOLOR="#66d9ff">Attention (Head 1)</TD></TR>
+            <TR><TD>Softmax(Q·K_latentᵀ / √d_head) × V_latent</TD></TR>
+            <TR><TD>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    attn2 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD BGCOLOR="#66d9ff">Attention (Head 2)</TD></TR>
+            <TR><TD>Softmax(Q·K_latentᵀ / √d_head) × V_latent</TD></TR>
+            <TR><TD>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    attn3 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#d9f2ff">
+            <TR><TD BGCOLOR="#66d9ff">Attention (Head 3)</TD></TR>
+            <TR><TD>Softmax(Q·K_latentᵀ / √d_head) × V_latent</TD></TR>
+            <TR><TD>Seq × d_head</TD></TR>
+        </TABLE>
+    >];
+
+    # Concat
+    concat [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f9e6ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffb3ff">Concat Heads</TD></TR>
+            <TR><TD>n_heads × d_head</TD><TD>Example: 4 × 128 = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Output
+    output [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6e6e6">
+            <TR><TD COLSPAN="2" BGCOLOR="#999999">Output Projection</TD></TR>
+            <TR><TD>Shape</TD><TD>Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_model = 512</TD></TR>
+        </TABLE>
+    >];
+
+    # Head alignment in same rank
+    { rank=same; head0; head1; head2; head3 }
+    { rank=same; attn0; attn1; attn2; attn3 }
+
+    # Edges
+    input -> head0;
+    input -> head1;
+    input -> head2;
+    input -> head3;
+
+    head0 -> attn0;
+    head1 -> attn1;
+    head2 -> attn2;
+    head3 -> attn3;
+
+    latent_kv -> attn0;
+    latent_kv -> attn1;
+    latent_kv -> attn2;
+    latent_kv -> attn3;
+
+    attn0 -> concat;
+    attn1 -> concat;
+    attn2 -> concat;
+    attn3 -> concat;
+
+    concat -> output;
+}
