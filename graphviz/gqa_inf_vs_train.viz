@@ -1,0 +1,113 @@
+digraph GQA_Train_Infer {
+    rankdir=LR;
+    bgcolor="lightgray";
+    node [shape=none, fontname="Courier"];
+    splines=ortho;
+
+    # TRAINING
+    subgraph cluster_training {
+        label="Training (No KV Cache)";
+        style=filled;
+        color=lightblue;
+
+        inputT [label=<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="white">
+                <TR><TD COLSPAN="3">Input Embeddings</TD></TR>
+                <TR><TD>d_model=1024</TD><TD>seq_len=n</TD><TD>batch=B</TD></TR>
+            </TABLE>
+        >];
+
+        wqT [label="Wq Projection", shape=box, style=filled, fillcolor="#f0f8ff"];
+        wkT [label="Wk Projection", shape=box, style=filled, fillcolor="#f0f8ff"];
+        wvT [label="Wv Projection", shape=box, style=filled, fillcolor="#f0f8ff"];
+
+        qT [label=<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f0f8ff">
+                <TR><TD COLSPAN="4">Q Heads</TD></TR>
+                <TR><TD>Q1</TD><TD>Q2</TD><TD>Q3</TD><TD>Q4</TD></TR>
+            </TABLE>
+        >];
+
+        kT [label=<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f0f8ff">
+                <TR><TD COLSPAN="2">K Heads</TD></TR>
+                <TR><TD>K1</TD><TD>K2</TD></TR>
+            </TABLE>
+        >];
+
+        vT [label=<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f0f8ff">
+                <TR><TD COLSPAN="2">V Heads</TD></TR>
+                <TR><TD>V1</TD><TD>V2</TD></TR>
+            </TABLE>
+        >];
+
+        attnT [label="Attention Scores\nO(n²)", shape=box, style=filled, fillcolor="#dbe9f6"];
+        outT [label="Output (all tokens)\nvia Wo", shape=box, style=filled, fillcolor="#dbe9f6"];
+
+        inputT -> wqT -> qT;
+        inputT -> wkT -> kT;
+        inputT -> wvT -> vT;
+
+        qT -> attnT;
+        kT -> attnT;
+        vT -> attnT;
+        attnT -> outT;
+    }
+
+    # INFERENCE
+    subgraph cluster_inference {
+        label="Inference (With KV Cache)";
+        style=filled;
+        color=lightgreen;
+
+        inputI [label=<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="white">
+                <TR><TD COLSPAN="3">Input Embedding</TD></TR>
+                <TR><TD>d_model=1024</TD><TD>seq_len=1</TD><TD>batch=B</TD></TR>
+            </TABLE>
+        >];
+
+        wqI [label="Wq Projection", shape=box, style=filled, fillcolor="#e6ffe6"];
+        wkI [label="Wk Projection", shape=box, style=filled, fillcolor="#fffacd"];
+        wvI [label="Wv Projection", shape=box, style=filled, fillcolor="#fffacd"];
+
+        qI [label=<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6ffe6">
+                <TR><TD COLSPAN="4">Q Heads (new token)</TD></TR>
+                <TR><TD>Q1</TD><TD>Q2</TD><TD>Q3</TD><TD>Q4</TD></TR>
+            </TABLE>
+        >];
+
+        kI [label=<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#fffacd">
+                <TR><TD COLSPAN="2">K (new)</TD></TR>
+                <TR><TD>K1</TD><TD>K2</TD></TR>
+            </TABLE>
+        >];
+
+        vI [label=<
+            <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#fffacd">
+                <TR><TD COLSPAN="2">V (new)</TD></TR>
+                <TR><TD>V1</TD><TD>V2</TD></TR>
+            </TABLE>
+        >];
+
+        cacheK [label="KV Cache (all past K)", shape=box, style=filled, fillcolor=yellow];
+        cacheV [label="KV Cache (all past V)", shape=box, style=filled, fillcolor=yellow];
+        attnI [label="Attention Scores\nO(n) per token", shape=box, style=filled, fillcolor="#d6f5d6"];
+        outI [label="Output (new token)\nvia Wo", shape=box, style=filled, fillcolor="#d6f5d6"];
+
+        inputI -> wqI -> qI;
+        inputI -> wkI -> kI;
+        inputI -> wvI -> vI;
+
+        kI -> cacheK [style=dashed];
+        vI -> cacheV [style=dashed];
+
+        qI -> attnI;
+        cacheK -> attnI;
+        cacheV -> attnI;
+        attnI -> outI;
+    }
+}
