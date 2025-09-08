@@ -1,0 +1,58 @@
+digraph FFN {
+    rankdir=TB;
+    bgcolor="lightgray";
+    splines=ortho;
+    node [shape=none, fontname="Courier"];
+
+    # Input
+    input [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffffff">
+            <TR><TD COLSPAN="2" BGCOLOR="#cce5ff">Input</TD></TR>
+            <TR><TD>Shape</TD><TD>(B, S, d_model)</TD></TR>
+            <TR><TD COLSPAN="2">Example: B = 4, S = 128, d_model = 4096</TD></TR>
+        </TABLE>
+    >];
+
+    # First Linear
+    linear1 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#fff2cc">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffcc66">Linear 1 (Projection Up)</TD></TR>
+            <TR><TD>Weights</TD><TD>(d_model, d_ff)</TD></TR>
+            <TR><TD>Output</TD><TD>(B, S, d_ff)</TD></TR>
+            <TR><TD COLSPAN="2">Example: d_ff = 16384</TD></TR>
+        </TABLE>
+    >];
+
+    # Activation
+    act [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6ffe6">
+            <TR><TD BGCOLOR="#66ff66">Activation</TD></TR>
+            <TR><TD>GELU / SwiGLU</TD></TR>
+            <TR><TD>(B, S, d_ff)</TD></TR>
+        </TABLE>
+    >];
+
+    # Second Linear
+    linear2 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f2e6ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#cc99ff">Linear 2 (Projection Down)</TD></TR>
+            <TR><TD>Weights</TD><TD>(d_ff, d_model)</TD></TR>
+            <TR><TD>Output</TD><TD>(B, S, d_model)</TD></TR>
+        </TABLE>
+    >];
+
+    # Output
+    output [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6e6e6">
+            <TR><TD COLSPAN="2" BGCOLOR="#999999">FFN Output</TD></TR>
+            <TR><TD>Shape</TD><TD>(B, S, d_model)</TD></TR>
+            <TR><TD COLSPAN="2">Same shape as input</TD></TR>
+        </TABLE>
+    >];
+
+    # Edges
+    input -> linear1;
+    linear1 -> act;
+    act -> linear2;
+    linear2 -> output;
+}
