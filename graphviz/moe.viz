@@ -1,0 +1,89 @@
+digraph MoE {
+    rankdir=TB;
+    bgcolor="lightgray";
+    splines=ortho;
+    nodesep=0.6;
+    ranksep=0.8;
+    node [shape=none, fontname="Courier"];
+
+    # Input
+    input [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffffff">
+            <TR><TD COLSPAN="2" BGCOLOR="#cce5ff">Input X</TD></TR>
+            <TR><TD>Shape</TD><TD>Batch × Seq × d_model</TD></TR>
+            <TR><TD COLSPAN="2">Example: (B=4, S=128, d_model=4096)</TD></TR>
+            <TR><TD>Flatten</TD><TD>(N=512, d_model)</TD></TR>
+        </TABLE>
+    >];
+
+    # Router
+    router [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#fff2cc">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffcc66">Router / Gating</TD></TR>
+            <TR><TD>Input</TD><TD>(N, d_model)</TD></TR>
+            <TR><TD>Logits</TD><TD>(N, E=4)</TD></TR>
+            <TR><TD>Top-k</TD><TD>(N, k=2)</TD></TR>
+            <TR><TD COLSPAN="2">Select 2 experts per token</TD></TR>
+        </TABLE>
+    >];
+
+    # Experts
+    expert0 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f2e6ff">
+            <TR><TD BGCOLOR="#cc99ff">Expert 0</TD></TR>
+            <TR><TD>Input (N₀, d_model)</TD></TR>
+            <TR><TD>FFN: W1, W2</TD></TR>
+            <TR><TD>Output (N₀, d_model)</TD></TR>
+        </TABLE>
+    >];
+
+    expert1 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6ffe6">
+            <TR><TD BGCOLOR="#66ff66">Expert 1 (Selected)</TD></TR>
+            <TR><TD>Input (N₁, d_model)</TD></TR>
+            <TR><TD>FFN: W1, W2</TD></TR>
+            <TR><TD>Output (N₁, d_model)</TD></TR>
+        </TABLE>
+    >];
+
+    expert2 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#e6ffe6">
+            <TR><TD BGCOLOR="#66ff66">Expert 2 (Selected)</TD></TR>
+            <TR><TD>Input (N₂, d_model)</TD></TR>
+            <TR><TD>FFN: W1, W2</TD></TR>
+            <TR><TD>Output (N₂, d_model)</TD></TR>
+        </TABLE>
+    >];
+
+    expert3 [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f2e6ff">
+            <TR><TD BGCOLOR="#cc99ff">Expert 3</TD></TR>
+            <TR><TD>Input (N₃, d_model)</TD></TR>
+            <TR><TD>FFN: W1, W2</TD></TR>
+            <TR><TD>Output (N₃, d_model)</TD></TR>
+        </TABLE>
+    >];
+
+    # Combine
+    combine [label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#f9e6ff">
+            <TR><TD COLSPAN="2" BGCOLOR="#ffb3ff">Combine / Gather</TD></TR>
+            <TR><TD>Input</TD><TD>Outputs from selected experts</TD></TR>
+            <TR><TD>Weighted sum</TD><TD>(N, d_model)</TD></TR>
+            <TR><TD>Reshape</TD><TD>(B, S, d_model)</TD></TR>
+        </TABLE>
+    >];
+
+    # Edges
+    input -> router;
+    router -> expert0;
+    router -> expert1;
+    router -> expert2;
+    router -> expert3;
+
+    expert1 -> combine;
+    expert2 -> combine;
+
+    # Keep experts in same rank
+    { rank=same; expert0; expert1; expert2; expert3 }
+}
