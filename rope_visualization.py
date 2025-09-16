@@ -1,15 +1,22 @@
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import Tuple
+import os
+from typing import Tuple, List
+from loguru import logger
 from model import RotaryEmbedding
 
 save_dir = "./plots/"
 
+# Ensure plots directory exists
+os.makedirs(save_dir, exist_ok=True)
 
-def test_basic_functionality():
+
+def test_basic_functionality() -> (
+    Tuple[RotaryEmbedding, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+):
     """Test basic RoPE functionality"""
-    print("=== Testing Basic RoPE Functionality ===")
+    logger.info("=== Testing Basic RoPE Functionality ===")
 
     # Setup
     batch_size, seq_len, num_heads, head_dim = 2, 128, 8, 64
@@ -24,21 +31,23 @@ def test_basic_functionality():
     query = torch.randn(seq_len, batch_size, num_heads, head_dim, device=device)
     key = torch.randn(seq_len, batch_size, num_heads, head_dim, device=device)
 
-    print(f"Input shapes - Query: {query.shape}, Key: {key.shape}")
+    logger.info(f"Input shapes - Query: {query.shape}, Key: {key.shape}")
 
     # Apply RoPE
     rotated_query, rotated_key = rope(query, key)
 
-    print(f"Output shapes - Query: {rotated_query.shape}, Key: {rotated_key.shape}")
-    print(f"Device: {rotated_query.device}")
-    print("✓ Basic functionality test passed!\n")
+    logger.info(
+        f"Output shapes - Query: {rotated_query.shape}, Key: {rotated_key.shape}"
+    )
+    logger.info(f"Device: {rotated_query.device}")
+    logger.success("✓ Basic functionality test passed!\n")
 
     return rope, query, key, rotated_query, rotated_key
 
 
-def test_yarn_scaling():
+def test_yarn_scaling() -> None:
     """Test YaRN scaling functionality"""
-    print("=== Testing YaRN Scaling ===")
+    logger.info("=== Testing YaRN Scaling ===")
 
     head_dim = 64
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -61,14 +70,16 @@ def test_yarn_scaling():
 
         rotated_q, rotated_k = rope(query, key)
 
-        print(f"Scale {scale}: seq_len={test_seq_len}, output_shape={rotated_q.shape}")
+        logger.info(
+            f"Scale {scale}: seq_len={test_seq_len}, output_shape={rotated_q.shape}"
+        )
 
-    print("✓ YaRN scaling tests passed!\n")
+    logger.success("✓ YaRN scaling tests passed!\n")
 
 
-def test_attention_patterns():
+def test_attention_patterns() -> Tuple[torch.Tensor, torch.Tensor]:
     """Test attention patterns with and without RoPE"""
-    print("=== Testing Attention Patterns ===")
+    logger.info("=== Testing Attention Patterns ===")
 
     seq_len, head_dim = 64, 32
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -90,17 +101,17 @@ def test_attention_patterns():
     )
     attn_with_rope = torch.softmax(attn_with_rope / (head_dim**0.5), dim=-1)
 
-    print(f"Attention matrix shape: {attn_with_rope.shape}")
-    print(f"Max attention (no RoPE): {attn_no_rope.max().item():.4f}")
-    print(f"Max attention (with RoPE): {attn_with_rope.max().item():.4f}")
-    print("✓ Attention pattern test passed!\n")
+    logger.info(f"Attention matrix shape: {attn_with_rope.shape}")
+    logger.info(f"Max attention (no RoPE): {attn_no_rope.max().item():.4f}")
+    logger.info(f"Max attention (with RoPE): {attn_with_rope.max().item():.4f}")
+    logger.success("✓ Attention pattern test passed!\n")
 
     return attn_no_rope.cpu(), attn_with_rope.cpu()
 
 
-def test_relative_position_property():
+def test_relative_position_property() -> None:
     """Test that RoPE encodes relative positions correctly"""
-    print("=== Testing Relative Position Property ===")
+    logger.info("=== Testing Relative Position Property ===")
 
     head_dim = 64
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -126,22 +137,24 @@ def test_relative_position_property():
     dot_10_20 = torch.dot(rotated_vectors[0].flatten(), rotated_vectors[1].flatten())
     dot_20_30 = torch.dot(rotated_vectors[1].flatten(), rotated_vectors[2].flatten())
 
-    print(f"Dot product (pos 10, pos 20): {dot_10_20.item():.6f}")
-    print(f"Dot product (pos 20, pos 30): {dot_20_30.item():.6f}")
-    print(f"Difference: {abs(dot_10_20 - dot_20_30).item():.6f}")
-    print("✓ Relative position property test passed!\n")
+    logger.info(f"Dot product (pos 10, pos 20): {dot_10_20.item():.6f}")
+    logger.info(f"Dot product (pos 20, pos 30): {dot_20_30.item():.6f}")
+    logger.info(f"Difference: {abs(dot_10_20 - dot_20_30).item():.6f}")
+    logger.success("✓ Relative position property test passed!\n")
 
 
 def visualize_frequency_scaling(
     scaling_factor: float = 4.0, initial_context_length: int = 2048
-):
+) -> None:
     """Visualize how YaRN affects different frequency components
 
     Args:
         scaling_factor: YaRN scaling factor to visualize (default: 4.0)
         initial_context_length: Original training context length (default: 2048)
     """
-    print(f"=== Visualizing YaRN Frequency Scaling (Factor: {scaling_factor}x) ===")
+    logger.info(
+        f"=== Visualizing YaRN Frequency Scaling (Factor: {scaling_factor}x) ==="
+    )
 
     head_dim = 64
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -307,7 +320,7 @@ def visualize_frequency_scaling(
 
     from matplotlib.collections import LineCollection
 
-    lc = LineCollection(segments, cmap="viridis", linewidths=4, alpha=0.8)
+    lc = LineCollection(segments.tolist(), cmap="viridis", linewidths=4, alpha=0.8)
     lc.set_array(dims)
     line = ax4.add_collection(lc)
 
@@ -384,19 +397,22 @@ def visualize_frequency_scaling(
 
     # Dynamic filename based on parameters
     filename = f"yarn_frequency_analysis_scale_{scaling_factor}x.png"
+    filepath = os.path.join(save_dir, filename)
 
     # Save with high quality
     plt.savefig(
-        filename, dpi=300, bbox_inches="tight", facecolor="#f8f9fa", edgecolor="none"
+        filepath, dpi=300, bbox_inches="tight", facecolor="#f8f9fa", edgecolor="none"
     )
     plt.show()
 
-    print(f"✓ Beautiful frequency scaling visualization saved as '{filename}'\n")
+    logger.success(
+        f"✓ Beautiful frequency scaling visualization saved as '{filepath}'\n"
+    )
 
 
-def benchmark_performance():
+def benchmark_performance() -> None:
     """Benchmark RoPE performance"""
-    print("=== Performance Benchmark ===")
+    logger.info("=== Performance Benchmark ===")
 
     import time
 
@@ -436,17 +452,17 @@ def benchmark_performance():
         end_time = time.time()
         avg_time = (end_time - start_time) / num_runs * 1000  # ms
 
-        print(f"Config {config}: {avg_time:.2f}ms per forward pass")
+        logger.info(f"Config {config}: {avg_time:.2f}ms per forward pass")
 
-    print("✓ Performance benchmark completed!\n")
+    logger.success("✓ Performance benchmark completed!\n")
 
 
 def visualize_embeddings_heatmap(
-    scaling_factors: list = [1.0, 2.0, 4.0, 8.0],
-    seq_lengths: list = [512, 1024, 2048, 4096],
+    scaling_factors: List[float] = [1.0, 2.0, 4.0, 8.0],
+    seq_lengths: List[int] = [512, 1024, 2048, 4096],
     head_dim: int = 64,
     initial_context_length: int = 2048,
-):
+) -> None:
     """Visualize RoPE embeddings as heatmaps across different scaling factors and sequence lengths
 
     Args:
@@ -455,9 +471,9 @@ def visualize_embeddings_heatmap(
         head_dim: Dimension of each attention head
         initial_context_length: Original training context length
     """
-    print(f"=== Visualizing RoPE Embeddings Heatmaps ===")
-    print(f"Scaling factors: {scaling_factors}")
-    print(f"Sequence lengths: {seq_lengths}")
+    logger.info(f"=== Visualizing RoPE Embeddings Heatmaps ===")
+    logger.info(f"Scaling factors: {scaling_factors}")
+    logger.info(f"Sequence lengths: {seq_lengths}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -626,12 +642,15 @@ def visualize_embeddings_heatmap(
 
     # Save with descriptive filename
     filename = f"rope_embeddings_heatmap_scales_{len(scaling_factors)}_lengths_{len(seq_lengths)}.png"
+    filepath = os.path.join(save_dir, filename)
     plt.savefig(
-        filename, dpi=300, bbox_inches="tight", facecolor="#f8f9fa", edgecolor="none"
+        filepath, dpi=300, bbox_inches="tight", facecolor="#f8f9fa", edgecolor="none"
     )
     plt.show()
 
-    print(f"✓ Beautiful embeddings heatmap visualization saved as '{filename}'")
+    logger.success(
+        f"✓ Beautiful embeddings heatmap visualization saved as '{filepath}'"
+    )
 
     # Create a second figure focusing on embedding differences
     _visualize_embedding_differences(
@@ -640,8 +659,11 @@ def visualize_embeddings_heatmap(
 
 
 def _visualize_embedding_differences(
-    scaling_factors: list, seq_lengths: list, head_dim: int, initial_context_length: int
-):
+    scaling_factors: List[float],
+    seq_lengths: List[int],
+    head_dim: int,
+    initial_context_length: int,
+) -> None:
     """Create a focused visualization showing embedding differences between standard RoPE and YaRN"""
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -733,8 +755,9 @@ def _visualize_embedding_differences(
 
     # Save comparison
     filename_comp = "rope_yarn_comparison_heatmaps.png"
+    filepath_comp = os.path.join(save_dir, filename_comp)
     plt.savefig(
-        filename_comp,
+        filepath_comp,
         dpi=300,
         bbox_inches="tight",
         facecolor="#f8f9fa",
@@ -742,4 +765,4 @@ def _visualize_embedding_differences(
     )
     plt.show()
 
-    print(f"✓ Comparison heatmap saved as '{filename_comp}'\n")
+    logger.success(f"✓ Comparison heatmap saved as '{filepath_comp}'\n")

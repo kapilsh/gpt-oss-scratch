@@ -1,8 +1,38 @@
+from dataclasses import dataclass
 import math
 from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+import json
+from dataclasses import dataclass
+
+
+@dataclass
+class ModelConfig:
+    num_hidden_layers: int
+    num_experts: int
+    experts_per_token: int
+    vocab_size: int
+    hidden_size: int
+    intermediate_size: int
+    swiglu_limit: float
+    head_dim: int
+    num_attention_heads: int
+    num_key_value_heads: int
+    sliding_window: int
+    initial_context_length: int
+    rope_theta: int
+    rope_scaling_factor: float
+    rope_ntk_alpha: int
+    rope_ntk_beta: int
+
+    @classmethod
+    def from_file(cls, file_path: str) -> "ModelConfig":
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        return cls(**data)
 
 
 class RMSNorm(nn.Module):
