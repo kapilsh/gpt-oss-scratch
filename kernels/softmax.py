@@ -179,6 +179,7 @@ def bench_softmax_forward(M, N, dtype, provider, device=None):
         ylabel="GB/s",
         plot_name="softmax-forward",
         args={"M": 4096, "dtype": torch.float16},
+        title="Softmax Forward Pass Performance (M=4096, dtype=float16)",
     )
 )
 def bench_softmax_small_batch(M, N, dtype, provider):
@@ -202,6 +203,7 @@ def bench_softmax_small_batch(M, N, dtype, provider):
             "N": 32000,
             "dtype": torch.float16,
         },  # Large vocabulary like language models
+        title="Softmax Forward Pass Performance (N=32000, dtype=float16)",
     )
 )
 def bench_softmax_batch_scaling(M, N, dtype, provider):
@@ -234,6 +236,7 @@ def bench_softmax_batch_scaling(M, N, dtype, provider):
         ylabel="GB/s",
         plot_name="softmax-vocab-scaling",
         args={"M": 512, "dtype": torch.float16},  # Typical batch*seq_len
+        title="Softmax Forward Pass Performance (M=512, dtype=float16)",
     )
 )
 def bench_softmax_vocab_scaling(M, N, dtype, provider):
@@ -247,11 +250,11 @@ def run_performance_benchmarks(print_data=True):
     """Run comprehensive performance benchmarks for Softmax."""
     logger.info("Starting Softmax performance benchmarks...")
 
-    # logger.info("Running small batch benchmark...")
-    # small_batch_results = bench_softmax_small_batch.run(
-    #     print_data=print_data, return_df=True, show_plots=True
-    # )
-    # logger.success("Small batch benchmark completed successfully!")
+    logger.info("Running small batch benchmark...")
+    small_batch_results = bench_softmax_small_batch.run(
+        print_data=print_data, return_df=True, show_plots=True
+    )
+    logger.success("Small batch benchmark completed successfully!")
 
     logger.info("Running batch scaling benchmark...")
     batch_scaling_results = bench_softmax_batch_scaling.run(
@@ -259,11 +262,11 @@ def run_performance_benchmarks(print_data=True):
     )
     logger.success("Batch scaling benchmark completed successfully!")
 
-    # logger.info("Running vocabulary scaling benchmark...")
-    # vocab_scaling_results = bench_softmax_vocab_scaling.run(
-    #     print_data=print_data, return_df=True, show_plots=True
-    # )
-    # logger.success("Vocabulary scaling benchmark completed successfully!")
+    logger.info("Running vocabulary scaling benchmark...")
+    vocab_scaling_results = bench_softmax_vocab_scaling.run(
+        print_data=print_data, return_df=True, show_plots=True
+    )
+    logger.success("Vocabulary scaling benchmark completed successfully!")
 
     logger.success("All Softmax performance benchmarks completed successfully!")
     # return small_batch_results, batch_scaling_results, vocab_scaling_results
