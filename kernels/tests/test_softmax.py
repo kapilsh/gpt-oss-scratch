@@ -17,7 +17,7 @@ from pathlib import Path
 # Add the parent directory to Python path to import softmax module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from softmax import softmax, pytorch_softmax, Softmax
+from softmax import softmax, pytorch_softmax, pytorch_softmax_compiled, Softmax
 
 # Test device
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
