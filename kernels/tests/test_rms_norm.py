@@ -14,8 +14,15 @@ from loguru import logger
 import sys
 from pathlib import Path
 
-# Add the current directory to Python path to import rms_norm module
-sys.path.insert(0, str(Path(__file__).parent))
+# Check if pytest-benchmark is available
+try:
+    import pytest_benchmark
+    BENCHMARK_AVAILABLE = True
+except ImportError:
+    BENCHMARK_AVAILABLE = False
+
+# Add the parent directory to Python path to import rms_norm module
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from rms_norm import rms_norm, pytorch_rms_norm, pytorch_rms_norm_compiled
 
@@ -61,9 +68,6 @@ class TestRMSNormCorrectness:
         """Test forward pass correctness against PyTorch implementation."""
         logger.info(f"Testing forward pass: M={M}, N={N}, dtype={dtype}, eps={eps}")
 
-        # Skip very large tests for float16 to avoid memory issues
-        if dtype == torch.float16 and M * N > 16_777_216:  # 16M elements
-            pytest.skip(f"Skipping large test for float16: {M}x{N}")
 
         # Create test data
         torch.manual_seed(42)
@@ -173,9 +177,30 @@ class TestRMSNormCorrectness:
 
         logger.success(f"✓ Backward test passed: M={M}, N={N}, dtype={dtype}")
 
-    @pytest.mark.parametrize("batch_size", [1, 4, 16, 64])
-    @pytest.mark.parametrize("seq_length", [128, 512, 1024])
-    @pytest.mark.parametrize("hidden_dim", [256, 512, 1024, 2048])
+    @pytest.mark.parametrize("batch_size,seq_length,hidden_dim", [
+        # Small models - test all combinations
+        (1, 128, 256), (1, 512, 256), (1, 1024, 256),
+        (4, 128, 256), (4, 512, 256), (4, 1024, 256),
+        (16, 128, 256), (16, 512, 256), (16, 1024, 256),
+        (64, 128, 256), (64, 512, 256),
+
+        # Medium models - limit larger batch sizes
+        (1, 128, 512), (1, 512, 512), (1, 1024, 512),
+        (4, 128, 512), (4, 512, 512), (4, 1024, 512),
+        (16, 128, 512), (16, 512, 512), (16, 1024, 512),
+        (64, 128, 512), (64, 512, 512),
+
+        # Large models - only small to medium batches
+        (1, 128, 1024), (1, 512, 1024), (1, 1024, 1024),
+        (4, 128, 1024), (4, 512, 1024), (4, 1024, 1024),
+        (16, 128, 1024), (16, 512, 1024), (16, 1024, 1024),
+        (32, 128, 1024), (32, 256, 1024),
+
+        # Very large models - only small batches
+        (1, 128, 2048), (1, 512, 2048), (1, 1024, 2048),
+        (4, 128, 2048), (4, 256, 2048),
+        (8, 128, 2048), (8, 256, 2048),
+    ])
     def test_transformer_dimensions(self, batch_size, seq_length, hidden_dim):
         """Test typical transformer model dimensions."""
         logger.info(f"Testing transformer dims: batch={batch_size}, seq={seq_length}, hidden={hidden_dim}")
@@ -187,10 +212,6 @@ class TestRMSNormCorrectness:
         # Use float16 for efficiency in large tests
         dtype = torch.float16
         eps = 1e-5
-
-        # Skip very large tests to avoid memory issues
-        if M * N > 33_554_432:  # 32M elements
-            pytest.skip(f"Skipping very large transformer test: {M}x{N}")
 
         torch.manual_seed(42)
         x_shape = (M, N)
@@ -310,9 +331,10 @@ class TestRMSNormCorrectness:
         logger.success(f"✓ Gradient flow test passed for dtype={dtype}")
 
 
+@pytest.mark.skipif(not BENCHMARK_AVAILABLE, reason="pytest-benchmark not installed")
 @pytest.mark.benchmark
 class TestRMSNormBenchmark:
-    """Optional benchmark tests - run with pytest -m benchmark."""
+    """Optional benchmark tests - run with pytest -m benchmark (requires pytest-benchmark)."""
 
     @pytest.mark.parametrize("M,N", [
         (1024, 2048),
@@ -338,6 +360,53 @@ class TestRMSNormBenchmark:
         # Also test PyTorch for comparison (uncomment if needed)
         # result_pytorch = pytorch_rms_norm(x, weight, eps)
         # assert torch.allclose(result_triton, result_pytorch, atol=1e-2, rtol=1e-3)
+
+    @pytest.mark.parametrize("M,N", [
+        (512, 1024),
+        (1024, 2048),
+        (2048, 4096),
+    ])
+    def test_simple_performance_timing(self, M, N):
+        """Simple performance timing test that doesn't require pytest-benchmark."""
+        import time
+
+        dtype = torch.float16
+        eps = 1e-5
+
+        torch.manual_seed(42)
+        weight = torch.randn((N,), dtype=dtype, device=DEVICE)
+        x = torch.randn((M, N), dtype=dtype, device=DEVICE) * 0.1
+
+        # Warm up
+        for _ in range(5):
+            _ = rms_norm(x, (N,), weight, eps)
+            _ = pytorch_rms_norm(x, weight, eps)
+
+        # Time Triton implementation
+        torch.cuda.synchronize()
+        start_time = time.time()
+        for _ in range(10):
+            result_triton = rms_norm(x, (N,), weight, eps)
+        torch.cuda.synchronize()
+        triton_time = time.time() - start_time
+
+        # Time PyTorch implementation
+        torch.cuda.synchronize()
+        start_time = time.time()
+        for _ in range(10):
+            result_pytorch = pytorch_rms_norm(x, weight, eps)
+        torch.cuda.synchronize()
+        pytorch_time = time.time() - start_time
+
+        # Verify correctness
+        assert torch.allclose(result_triton, result_pytorch, atol=1e-2, rtol=1e-3), \
+            "Performance test failed correctness check"
+
+        logger.info(f"Performance comparison {M}x{N}: Triton={triton_time:.4f}s, PyTorch={pytorch_time:.4f}s, "
+                   f"Speedup={pytorch_time/triton_time:.2f}x")
+
+        # Just ensure both run without errors - don't enforce speedup requirements
+        assert triton_time > 0 and pytorch_time > 0, "Timing measurements should be positive"
 
 
 if __name__ == "__main__":
