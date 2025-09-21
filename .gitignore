@@ -214,3 +214,4 @@ tensorboard
 .vscode
 unsloth_compiled_cache
 plots
+*.ncu-rep
