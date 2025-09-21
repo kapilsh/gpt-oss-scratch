@@ -28,9 +28,7 @@ def softmax_forward(
     if n_cols <= BLOCK_SIZE:
         col_offsets = tl.arange(0, BLOCK_SIZE)
         mask = col_offsets < n_cols
-        vals = tl.load(in_row_ptr + col_offsets, mask=mask, other=-float("inf")).to(
-            tl.float32
-        )
+        vals = tl.load(in_row_ptr + col_offsets, mask=mask, other=-100.0).to(tl.float32)
 
         row_max = tl.max(vals, axis=0)
         vals_stable = vals - row_max
@@ -44,11 +42,11 @@ def softmax_forward(
     # ---- Tiled path: handle rows larger than BLOCK_SIZE ----
     # ==== Reduction Pass ====
     # Pass 1: compute row max
-    row_max = -float("inf")
+    row_max = -100.0
     for start in range(0, n_cols, BLOCK_SIZE):
         cols = start + tl.arange(0, BLOCK_SIZE)
         mask = cols < n_cols
-        vals = tl.load(in_row_ptr + cols, mask=mask, other=-float("inf")).to(tl.float32)
+        vals = tl.load(in_row_ptr + cols, mask=mask, other=-100.0).to(tl.float32)
         row_max = tl.maximum(row_max, tl.max(vals, axis=0))
 
     # ==== Reduction Pass ====
@@ -58,15 +56,17 @@ def softmax_forward(
         cols = start + tl.arange(0, BLOCK_SIZE)
         mask = cols < n_cols
         vals = tl.load(in_row_ptr + cols, mask=mask, other=0.0).to(tl.float32)
-        row_sum += tl.sum(tl.exp(vals - row_max), axis=0)
+        exp_vals = tl.exp(vals - row_max)
+        row_sum += tl.sum(exp_vals, axis=0)
 
     # ==== Pointwise pass ====
-    # Pass 3: normalize + write
+    # Pass 3: normalize + write (recompute exp, but this is unavoidable due to memory constraints)
     for start in range(0, n_cols, BLOCK_SIZE):
         cols = start + tl.arange(0, BLOCK_SIZE)
         mask = cols < n_cols
         vals = tl.load(in_row_ptr + cols, mask=mask, other=0.0).to(tl.float32)
-        out = tl.exp(vals - row_max) / row_sum
+        exp_vals = tl.exp(vals - row_max)
+        out = exp_vals / row_sum
         tl.store(out_row_ptr + cols, out, mask=mask)
 
 
@@ -180,6 +180,7 @@ def bench_softmax_forward(M, N, dtype, provider, device=None):
         plot_name="softmax-forward",
         args={"M": 4096, "dtype": torch.float16},
         title="Softmax Forward Pass Performance (M=4096, dtype=float16)",
+        x_log=True,
     )
 )
 def bench_softmax_small_batch(M, N, dtype, provider):
@@ -204,6 +205,7 @@ def bench_softmax_small_batch(M, N, dtype, provider):
             "dtype": torch.float16,
         },  # Large vocabulary like language models
         title="Softmax Forward Pass Performance (N=32000, dtype=float16)",
+        x_log=True,
     )
 )
 def bench_softmax_batch_scaling(M, N, dtype, provider):
@@ -237,6 +239,7 @@ def bench_softmax_batch_scaling(M, N, dtype, provider):
         plot_name="softmax-vocab-scaling",
         args={"M": 512, "dtype": torch.float16},  # Typical batch*seq_len
         title="Softmax Forward Pass Performance (M=512, dtype=float16)",
+        x_log=True,
     )
 )
 def bench_softmax_vocab_scaling(M, N, dtype, provider):
