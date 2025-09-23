@@ -17,7 +17,7 @@ from pathlib import Path
 # Add the parent directory to Python path to import softmax module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from softmax import softmax, pytorch_softmax, pytorch_softmax_compiled, Softmax
+from softmax import softmax, softmax_tutorial, pytorch_softmax, pytorch_softmax_compiled, Softmax
 
 # Test device
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -316,6 +316,214 @@ class TestSoftmaxCorrectness:
                 f"Softmax doesn't sum to 1 for shape {shape} (max dev: {torch.max(torch.abs(sums - 1.0)):.6f})"
 
         logger.success("✓ Multidimensional input tests passed")
+
+
+class TestSoftmaxTutorialCorrectness:
+    """Test suite for Softmax Tutorial implementation correctness across different configurations."""
+
+    @pytest.mark.parametrize("M,N", [
+        (1, 16),        # Single sample, very small feature dim
+        (1, 64),        # Single sample, small feature dim
+        (1, 128),       # Single sample, small-medium feature dim
+        (1, 256),       # Single sample, medium feature dim
+        (1, 512),       # Single sample, medium-large feature dim
+        (1, 1024),      # Single sample, large feature dim
+        (1, 2048),      # Single sample, very large feature dim
+        (2, 128),       # Small batch, small feature dim
+        (4, 256),       # Small batch, medium feature dim
+        (8, 512),       # Small batch, large feature dim
+        (16, 1024),     # Medium batch, large feature dim
+        (32, 512),      # Medium batch, medium-large feature dim
+        (64, 256),      # Large batch, medium feature dim
+        (128, 128),     # Large batch, small-medium feature dim
+        (256, 512),     # Large batch, large feature dim
+        (512, 1024),    # Very large batch, large feature dim
+        (1024, 2048),   # Stress test - very large dimensions
+    ])
+    @pytest.mark.parametrize("dtype", [
+        torch.float16,
+        torch.float32,
+    ])
+    def test_tutorial_forward_correctness(self, M, N, dtype):
+        """Test tutorial implementation forward pass correctness against PyTorch implementation."""
+        logger.info(f"Testing tutorial forward pass: M={M}, N={N}, dtype={dtype}")
+
+        # Create test data
+        torch.manual_seed(42)
+        x_shape = (M, N)
+
+        # Initialize input tensor with controlled range to avoid overflow
+        x = torch.randn(x_shape, dtype=dtype, device=DEVICE)
+        # Scale to reasonable range for softmax
+        x = x * 2.0  # Keep in reasonable range to avoid overflow
+
+        # Forward pass - Tutorial implementation
+        y_tutorial = softmax_tutorial(x)
+
+        # Forward pass - PyTorch reference
+        y_pytorch = pytorch_softmax(x, dim=-1)
+
+        # Check correctness
+        max_diff = torch.max(torch.abs(y_tutorial - y_pytorch)).item()
+        assert torch.allclose(y_tutorial, y_pytorch, atol=FORWARD_ATOL, rtol=FORWARD_RTOL), \
+            f"Tutorial vs PyTorch forward mismatch: max_diff={max_diff:.6f}"
+
+        # Check that outputs are valid probabilities
+        # Sum should be approximately 1 along last dimension
+        tutorial_sums = torch.sum(y_tutorial, dim=-1)
+        pytorch_sums = torch.sum(y_pytorch, dim=-1)
+
+        sum_tol = get_sum_tolerance(dtype)
+        assert torch.allclose(tutorial_sums, torch.ones_like(tutorial_sums), atol=sum_tol), \
+            f"Tutorial softmax output doesn't sum to 1 (max dev: {torch.max(torch.abs(tutorial_sums - 1.0)):.6f})"
+        assert torch.allclose(pytorch_sums, torch.ones_like(pytorch_sums), atol=sum_tol), \
+            f"PyTorch softmax output doesn't sum to 1 (max dev: {torch.max(torch.abs(pytorch_sums - 1.0)):.6f})"
+
+        # Check that all values are non-negative
+        assert torch.all(y_tutorial >= 0), "Tutorial softmax output contains negative values"
+        assert torch.all(y_pytorch >= 0), "PyTorch softmax output contains negative values"
+
+        logger.success(f"✓ Tutorial forward test passed: M={M}, N={N}, dtype={dtype}")
+
+    def test_tutorial_vs_original_implementation(self):
+        """Test that tutorial implementation matches original implementation."""
+        logger.info("Testing tutorial vs original implementation...")
+
+        test_cases = [
+            (1, 128, torch.float32),
+            (4, 512, torch.float32),
+            (16, 1024, torch.float16),
+            (32, 2048, torch.float16),
+            (64, 4096, torch.float16),
+        ]
+
+        for M, N, dtype in test_cases:
+            torch.manual_seed(42)
+            x = torch.randn((M, N), dtype=dtype, device=DEVICE) * 2.0
+
+            # Both implementations
+            y_original = softmax(x, dim=-1)
+            y_tutorial = softmax_tutorial(x)
+
+            # Should produce very similar results (allowing for different numerical paths)
+            assert torch.allclose(y_original, y_tutorial, atol=FORWARD_ATOL, rtol=FORWARD_RTOL), \
+                f"Original vs Tutorial mismatch for {M}x{N}, dtype={dtype}"
+
+            logger.success(f"✓ Original vs Tutorial match: {M}x{N}, {dtype}")
+
+    @pytest.mark.parametrize("batch_size,seq_length,vocab_size", [
+        # Small vocabulary tests
+        (1, 32, 128), (1, 128, 512), (1, 512, 1024),
+        (4, 32, 128), (4, 128, 512), (4, 512, 1024),
+        (16, 32, 128), (16, 128, 512), (16, 256, 1024),
+
+        # Medium vocabulary tests
+        (1, 128, 4096), (1, 512, 4096),
+        (4, 128, 4096), (4, 256, 4096),
+        (16, 128, 4096),
+
+        # Large vocabulary tests (tutorial implementation should handle these with adaptive settings)
+        (1, 32, 32000), (1, 128, 32000),
+        (2, 128, 32000), (2, 256, 32000),
+        (4, 64, 32000), (4, 128, 32000),
+    ])
+    def test_tutorial_transformer_dimensions(self, batch_size, seq_length, vocab_size):
+        """Test tutorial implementation with typical transformer model dimensions."""
+        logger.info(f"Testing tutorial transformer dims: batch={batch_size}, seq={seq_length}, vocab={vocab_size}")
+
+        M = batch_size * seq_length
+        N = vocab_size
+
+        # Use float16 for efficiency in large tests
+        dtype = torch.float16 if vocab_size > 1024 else torch.float32
+
+        torch.manual_seed(42)
+        x_shape = (M, N)
+
+        # Create logits with realistic range for language modeling
+        x = torch.randn(x_shape, dtype=dtype, device=DEVICE) * 3.0
+
+        # Forward pass
+        y_tutorial = softmax_tutorial(x)
+        y_pytorch = pytorch_softmax(x, dim=-1)
+
+        # Check correctness
+        assert torch.allclose(y_tutorial, y_pytorch, atol=FORWARD_ATOL, rtol=FORWARD_RTOL), \
+            f"Tutorial transformer dims mismatch: batch={batch_size}, seq={seq_length}, vocab={vocab_size}"
+
+        # Verify probability properties
+        sums = torch.sum(y_tutorial, dim=-1)
+        sum_tol = get_sum_tolerance(dtype)
+        assert torch.allclose(sums, torch.ones_like(sums), atol=sum_tol), \
+            f"Tutorial softmax doesn't sum to 1 for transformer dimensions (max dev: {torch.max(torch.abs(sums - 1.0)):.6f})"
+
+        logger.success(f"✓ Tutorial transformer test passed: {batch_size}x{seq_length}x{vocab_size}")
+
+    def test_tutorial_numerical_stability(self):
+        """Test tutorial implementation numerical stability with extreme values."""
+        logger.info("Testing tutorial numerical stability...")
+
+        M, N = 32, 256
+        dtype = torch.float32
+
+        torch.manual_seed(42)
+
+        # Test with large values (potential overflow)
+        x_large = torch.randn((M, N), dtype=dtype, device=DEVICE) * 10 + 50
+        y_tutorial_large = softmax_tutorial(x_large)
+        y_pytorch_large = pytorch_softmax(x_large, dim=-1)
+
+        assert torch.allclose(y_tutorial_large, y_pytorch_large, atol=1e-3, rtol=1e-2), \
+            "Tutorial large values test failed"
+
+        # Verify no NaN or Inf
+        assert not torch.isnan(y_tutorial_large).any(), "Tutorial large values produced NaN"
+        assert not torch.isinf(y_tutorial_large).any(), "Tutorial large values produced Inf"
+
+        # Test with very negative values (potential underflow)
+        x_negative = torch.randn((M, N), dtype=dtype, device=DEVICE) * 2 - 20
+        y_tutorial_negative = softmax_tutorial(x_negative)
+        y_pytorch_negative = pytorch_softmax(x_negative, dim=-1)
+
+        assert torch.allclose(y_tutorial_negative, y_pytorch_negative, atol=1e-5, rtol=1e-3), \
+            "Tutorial very negative values test failed"
+
+        logger.success("✓ Tutorial numerical stability tests passed")
+
+    def test_tutorial_adaptive_block_sizes(self):
+        """Test that tutorial implementation adapts correctly to different vocabulary sizes."""
+        logger.info("Testing tutorial adaptive block size behavior...")
+
+        dtype = torch.float32
+        torch.manual_seed(42)
+
+        # Test cases that should trigger different adaptive behaviors
+        test_cases = [
+            (1, 512),    # Small vocab - should use 4 stages, 4 warps
+            (1, 2048),   # Medium vocab - should use 2-4 stages, 8 warps
+            (1, 8192),   # Large vocab - should use 1-2 stages, 16 warps
+            (1, 16384),  # Very large vocab - should use 1 stage, capped block size
+        ]
+
+        for M, N in test_cases:
+            x = torch.randn((M, N), dtype=dtype, device=DEVICE) * 2.0
+
+            # Should not crash due to resource constraints
+            y_tutorial = softmax_tutorial(x)
+            y_pytorch = pytorch_softmax(x, dim=-1)
+
+            assert torch.allclose(y_tutorial, y_pytorch, atol=FORWARD_ATOL, rtol=FORWARD_RTOL), \
+                f"Tutorial adaptive test failed for {M}x{N}"
+
+            # Verify probability properties
+            sums = torch.sum(y_tutorial, dim=-1)
+            sum_tol = get_sum_tolerance(dtype)
+            assert torch.allclose(sums, torch.ones_like(sums), atol=sum_tol), \
+                f"Tutorial adaptive softmax doesn't sum to 1 for {M}x{N}"
+
+            logger.success(f"✓ Tutorial adaptive test passed: {M}x{N}")
+
+        logger.success("✓ Tutorial adaptive block size tests passed")
 
 
 class TestSoftmaxModule:

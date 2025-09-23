@@ -9,7 +9,7 @@ from loguru import logger
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from softmax import softmax
+from softmax import softmax, softmax_tutorial
 
 # Ensure CUDA is available
 if not torch.cuda.is_available():
@@ -41,6 +41,8 @@ def benchmark_softmax(
     # Select softmax function
     if backend == "triton":
         softmax_fn = softmax
+    elif backend == "triton_tutorial":
+        softmax_fn = softmax_tutorial
     elif backend == "torch":
         softmax_fn = lambda x: torch.nn.functional.softmax(x, dim=-1)
     else:
@@ -102,9 +104,9 @@ def benchmark_softmax(
 )
 @click.option(
     "--backend",
-    type=click.Choice(["triton", "torch"]),
+    type=click.Choice(["triton", "triton_tutorial", "torch"]),
     default="triton",
-    help="Backend to use: triton (custom kernel) or torch (PyTorch)",
+    help="Backend to use: triton (custom kernel), triton_tutorial (tutorial kernel), or torch (PyTorch)",
 )
 @click.option(
     "--dtype",
@@ -138,6 +140,8 @@ def main(m, n, backend, dtype, warmup, iters, profile_only):
 
         if backend == "triton":
             output = softmax(x)
+        elif backend == "triton_tutorial":
+            output = softmax_tutorial(x)
         else:  # torch
             output = torch.nn.functional.softmax(x, dim=-1)
 

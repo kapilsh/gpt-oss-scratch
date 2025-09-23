@@ -1,0 +1,39 @@
+
+[
+    {
+        "children": [
+            {
+                "children": [],
+                "frame": {
+                    "name": "softmax_forward",
+                    "type": "function"
+                },
+                "metrics": {
+                    "count": 1000,
+                    "device_id": "0",
+                    "device_type": "CUDA",
+                    "time (ns)": 1377958478
+                }
+            }
+        ],
+        "frame": {
+            "name": "ROOT",
+            "type": "function"
+        },
+        "metrics": {
+            "count": 0,
+            "time (ns)": 0
+        }
+    },
+    {
+        "CUDA": {
+            "0": {
+                "arch": "89",
+                "bus_width": 384,
+                "clock_rate": 2520000,
+                "memory_clock_rate": 10501000,
+                "num_sms": 128
+            }
+        }
+    }
+]
