@@ -215,3 +215,4 @@ tensorboard
 unsloth_compiled_cache
 plots
 *.ncu-rep
+traces*
