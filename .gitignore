@@ -216,3 +216,12 @@ unsloth_compiled_cache
 plots
 *.ncu-rep
 traces*
+
+# Node / Vite app
+app/node_modules/
+app/dist/
+app/.vite/
+app/*.local
+
+# data dir (model cache)
+data/

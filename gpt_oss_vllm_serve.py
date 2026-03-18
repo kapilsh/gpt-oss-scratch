@@ -40,15 +40,55 @@ logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 import click
 import structlog
+import torch
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel, Field
 from transformers import AutoTokenizer
 from vllm import AsyncEngineArgs, AsyncLLMEngine, SamplingParams
 from vllm.inputs import TokensPrompt
 
 log = structlog.get_logger()
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+
+REQUESTS_TOTAL = Counter(
+    "gptoss_requests_total",
+    "Total number of chat completion requests",
+    ["status"],          # "success" | "error"
+)
+PROMPT_TOKENS = Counter(
+    "gptoss_prompt_tokens_total",
+    "Total prompt tokens processed across all requests",
+)
+COMPLETION_TOKENS = Counter(
+    "gptoss_completion_tokens_total",
+    "Total completion tokens generated across all requests",
+)
+REQUEST_LATENCY = Histogram(
+    "gptoss_request_latency_seconds",
+    "End-to-end request latency (from token IDs ready to last token out)",
+    buckets=[0.1, 0.5, 1, 2, 5, 10, 30, 60, 120],
+)
+TIME_TO_FIRST_TOKEN = Histogram(
+    "gptoss_ttft_seconds",
+    "Time to first token (prefill latency)",
+    buckets=[0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+)
+REQUESTS_IN_FLIGHT = Gauge(
+    "gptoss_requests_in_flight",
+    "Number of requests currently being processed",
+)
 
 # ---------------------------------------------------------------------------
 # Request / Response types  (OpenAI-compatible subset)
@@ -68,6 +108,7 @@ class ChatCompletionRequest(BaseModel):
     top_k: int = Field(default=-1)                  # -1 = disabled
     stream: bool = False
     stop: list[str] | None = None
+    profile: bool = False          # wrap generation with torch.profiler; trace saved to traces/
 
 
 def _make_chunk(
@@ -170,6 +211,31 @@ class GPTOSSServer:
         return self.tokenizer.decode([token_id], skip_special_tokens=False)
 
     # ------------------------------------------------------------------
+    # Profiler helper
+    # ------------------------------------------------------------------
+
+    def _make_profiler(self, request_id: str) -> tuple:
+        """
+        Build a torch.profiler.profile context manager and return
+        (profiler, trace_dir).  The caller is responsible for .start()
+        and .stop().  Traces are written in TensorBoard format so you
+        can inspect with:  tensorboard --logdir traces/
+        """
+        trace_dir = os.path.join("traces", f"trace_{request_id}")
+        os.makedirs(trace_dir, exist_ok=True)
+        profiler = torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(trace_dir),
+            record_shapes=True,
+            with_stack=True,
+            profile_memory=True,
+        )
+        return profiler, trace_dir
+
+    # ------------------------------------------------------------------
     # Core generation
     # ------------------------------------------------------------------
 
@@ -177,24 +243,37 @@ class GPTOSSServer:
         self, request_id: str, token_ids: list[int], sampling_params: SamplingParams
     ):
         """
-        Async generator yielding (token_id, text, is_finished) tuples.
+        Async generator yielding (delta_text, finish_reason, is_finished).
 
         We pass pre-tokenized token IDs via TokensPrompt so vLLM never
         re-tokenizes the input — full transparency over the pipeline.
+
+        Also records TTFT into Prometheus histograms.
         """
         prompt = TokensPrompt(prompt_token_ids=token_ids)
         gen = self.engine.generate(prompt, sampling_params, request_id=request_id)
 
         previous_text_len = 0
+        previous_token_count = 0
+        first_token = True
+        t_start = time.perf_counter()
+
         async for output in gen:
             if not output.outputs:
                 continue
             o = output.outputs[0]
-            # vLLM accumulates text; slice the delta since last yield
             delta_text = o.text[previous_text_len:]
             previous_text_len = len(o.text)
+            # Actual tokens generated this step (from vLLM's token ID list)
+            new_tokens = len(o.token_ids) - previous_token_count
+            previous_token_count = len(o.token_ids)
+
+            if first_token and delta_text:
+                TIME_TO_FIRST_TOKEN.observe(time.perf_counter() - t_start)
+                first_token = False
+
             finished = o.finish_reason is not None
-            yield delta_text, o.finish_reason, finished
+            yield delta_text, o.finish_reason, finished, new_tokens
             if finished:
                 break
 
@@ -208,6 +287,10 @@ class GPTOSSServer:
         @app.get("/health")
         async def health():
             return {"status": "ok"}
+
+        @app.get("/metrics")
+        async def metrics():
+            return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
         @app.get("/v1/models")
         async def list_models():
@@ -247,49 +330,91 @@ class GPTOSSServer:
                 stop_token_ids=stop_token_ids,
             )
 
-            # ── Step 4: stream or collect ─────────────────────────────
+            # ── Step 4: optionally set up profiler ────────────────────
+            profiler, trace_dir = (
+                self._make_profiler(request_id) if request.profile else (None, None)
+            )
+            if profiler:
+                profiler.start()
+                log.info("profiler_started", request_id=request_id, trace_dir=trace_dir)
+
+            # ── Step 5: stream or collect ─────────────────────────────
+            REQUESTS_IN_FLIGHT.inc()
+            PROMPT_TOKENS.inc(prompt_tokens)
+            t_request_start = time.perf_counter()
+
             if request.stream:
                 async def event_stream():
-                    # Opening chunk: role delta
-                    yield _make_chunk(
-                        request_id, request.model, {"role": "assistant", "content": ""}
-                    )
-                    async for delta_text, finish_reason, finished in self.generate_stream(
-                        request_id, token_ids, sampling
-                    ):
-                        if delta_text:
-                            yield _make_chunk(
-                                request_id, request.model, {"content": delta_text}
-                            )
-                        if finished:
-                            yield _make_chunk(
-                                request_id, request.model, {}, finish_reason=finish_reason or "stop"
-                            )
-                    yield "data: [DONE]\n\n"
+                    completion_tokens = 0
+                    try:
+                        yield _make_chunk(
+                            request_id, request.model, {"role": "assistant", "content": ""}
+                        )
+                        async for delta_text, finish_reason, finished, n_tokens in self.generate_stream(
+                            request_id, token_ids, sampling
+                        ):
+                            completion_tokens += n_tokens
+                            if delta_text:
+                                yield _make_chunk(
+                                    request_id, request.model, {"content": delta_text}
+                                )
+                            if finished:
+                                yield _make_chunk(
+                                    request_id, request.model, {}, finish_reason=finish_reason or "stop"
+                                )
+                        yield "data: [DONE]\n\n"
+                        COMPLETION_TOKENS.inc(completion_tokens)
+                        REQUESTS_TOTAL.labels(status="success").inc()
+                    except Exception:
+                        REQUESTS_TOTAL.labels(status="error").inc()
+                        raise
+                    finally:
+                        if profiler:
+                            profiler.stop()
+                            log.info("profiler_saved", request_id=request_id, trace_dir=trace_dir)
+                        REQUESTS_IN_FLIGHT.dec()
+                        REQUEST_LATENCY.observe(time.perf_counter() - t_request_start)
 
-                return StreamingResponse(event_stream(), media_type="text/event-stream")
+                headers = {"X-Profile-Trace": trace_dir} if trace_dir else {}
+                return StreamingResponse(
+                    event_stream(), media_type="text/event-stream", headers=headers
+                )
 
             else:
-                # Non-streaming: collect everything then respond
-                full_text = ""
-                completion_tokens = 0
-                async for delta_text, _, finished in self.generate_stream(
-                    request_id, token_ids, sampling
-                ):
-                    full_text += delta_text
-                    completion_tokens += 1
+                try:
+                    full_text = ""
+                    completion_tokens = 0
+                    async for delta_text, _, finished, n_tokens in self.generate_stream(
+                        request_id, token_ids, sampling
+                    ):
+                        full_text += delta_text
+                        completion_tokens += n_tokens
 
-                log.info(
-                    "generation_complete",
-                    request_id=request_id,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                )
-                return JSONResponse(
-                    _make_full_response(
+                    COMPLETION_TOKENS.inc(completion_tokens)
+                    REQUESTS_TOTAL.labels(status="success").inc()
+                    log.info(
+                        "generation_complete",
+                        request_id=request_id,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        trace_dir=trace_dir,
+                    )
+                    resp = _make_full_response(
                         request_id, request.model, full_text, prompt_tokens, completion_tokens
                     )
-                )
+                    if trace_dir:
+                        resp["profile_trace"] = trace_dir
+                    headers = {"X-Profile-Trace": trace_dir} if trace_dir else {}
+                    return JSONResponse(resp, headers=headers)
+                except Exception:
+                    REQUESTS_TOTAL.labels(status="error").inc()
+                    raise
+                finally:
+                    if profiler:
+                        profiler.stop()
+                        log.info("profiler_saved", request_id=request_id, trace_dir=trace_dir)
+                    REQUESTS_IN_FLIGHT.dec()
+                    REQUEST_LATENCY.observe(time.perf_counter() - t_request_start)
 
 
 # ---------------------------------------------------------------------------
